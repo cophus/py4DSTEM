@@ -150,7 +150,13 @@ class PointListSet(DataObject):
         shape (2-tuple of ints): the array shape.  Typically the real space shape
             ``(R_Nx, R_Ny)``.
     """
-    def __init__(self, field_names, shape, dtype=float, **kwargs):
+    def __init__(
+            self, 
+            field_names, 
+            shape, 
+            dtype = float, 
+            estimated_max_points = None,
+            **kwargs):
         """
         Instantiate a PointListSet object.
         Creates a PointList with field_names at each point of a 2D grid with a shape specified
@@ -162,12 +168,31 @@ class PointListSet(DataObject):
         self.default_dtype = dtype      #: the default datatype; see the PointList documentation
 
         self.shape = shape
-        self.ind_start = np.zeros(shape, dtype='int')
-        self.ind_stop = np.zeros(shape, dtype='int')
-        self.ind_current = np.array([0], dtype='int')
 
-        self.point_data = PointList(field_names)
+        if estimated_max_points is None:
+            self.ind_start = np.zeros(shape, dtype='int')
+            self.ind_stop = np.zeros(shape, dtype='int')
+            self.ind_current = np.array([0], dtype='int')
+            self.point_data = PointList(field_names)
 
+        else:
+            total_points = shape[0]*shape[1]*estimated_max_points
+            estimated_max_points = np.array(estimated_max_points, dtype='int')
+
+            self.ind_start = np.arange(np.prod(shape)) * estimated_max_points
+            self.ind_start.shape = shape
+            self.ind_stop = self.ind_start + estimated_max_points
+            self.ind_current = np.array(total_points, dtype='int')
+
+            self.point_data = PointList(
+                field_names,
+            )
+            self.point_data.add_pointarray(np.zeros((total_points,len(field_names))))
+            #     # data=np.zeros((total_points,len(field_names))),
+            # self.point_data = PointList(
+            #     field_names,
+            #     data = np.zeros((total_points,len(field_names))),
+            # )
 
     def get_pointlist(self, ax, ay):
         """
@@ -184,7 +209,7 @@ class PointListSet(DataObject):
         """
 
         num_points_init = self.ind_stop[ax,ay] - self.ind_start[ax,ay]
-        num_points_add = pointlist.data.shape
+        num_points_add = pointlist.data.shape[0]
 
         if num_points_init == 0 or num_points_add > num_points_init:
             # print(self.point_data.data.dtype)
@@ -194,12 +219,42 @@ class PointListSet(DataObject):
             self.ind_current += num_points_add
 
         elif num_points_add == num_points_init:
-            self.point_data[self.ind_start[ax,ay]:self.ind_stop[ax,ay]] = pointlist
+            self.point_data.data[self.ind_start[ax,ay]:self.ind_stop[ax,ay]] = pointlist.data
 
         # elif num_points_add < num_points_init:
         else:
             self.ind_stop[ax,ay] = self.ind_start[ax,ay]+num_points_add
-            self.point_data[self.ind_start[ax,ay]:self.ind_stop[ax,ay]] = pointlist
+            self.point_data.data[self.ind_start[ax,ay]:self.ind_stop[ax,ay]] = pointlist.data
+
+    def set_pointlist_data(self, pointlist_data, ax, ay):
+        """
+        Stores the pointlist at ax,ay.
+        If point list doesn't exist, append to the list.  
+        If it does exist, replace it or append it depending on length.
+        """
+
+        num_points_init = self.ind_stop[ax,ay] - self.ind_start[ax,ay]
+        num_points_add = pointlist_data.shape[0]
+
+        if num_points_init == 0 or num_points_add > num_points_init:
+            1+1
+            # print(self.point_data.data.dtype)
+            # self.point_data.add_pointlist(pointlist)
+            # self.ind_start[ax,ay] = self.ind_current
+            # self.ind_stop[ax,ay] = self.ind_current + num_points_add 
+            # self.ind_current += num_points_add
+
+        elif num_points_add == num_points_init:
+            self.point_data.data[self.ind_start[ax,ay]:self.ind_stop[ax,ay]] = pointlist_data
+
+        # elif num_points_add < num_points_init:
+        else:
+            self.ind_stop[ax,ay] = self.ind_start[ax,ay]+num_points_add
+            # self.point_data.data[self.ind_start[ax,ay]:self.ind_stop[ax,ay]] = pointlist_data
+            np.core.records.fromarrays
+
+
+
 
     def get_bragg_vector_map(self, Q_Nx, Q_Ny):
         """
