@@ -3,7 +3,8 @@ from copy import copy
 import h5py
 from .dataobject import DataObject
 from .pointlist import PointList
-from ...process.utils import tqdmnd
+from ...process.utils import tqdmnd, add_to_2D_array_from_floats
+
 
 class PointListArray(DataObject):
     """
@@ -136,3 +137,107 @@ def get_pointlistarray_from_grp(g):
     return pla
 
 
+
+
+class PointListSet(DataObject):
+    """
+    An object containing an array of PointLists.
+    Facilitates more rapid access of subpointlists which have known, well structured coordinates, such
+    as real space scan positions R_Nx,R_Ny.
+
+    Args:
+        field_names: see PointList documentation
+        shape (2-tuple of ints): the array shape.  Typically the real space shape
+            ``(R_Nx, R_Ny)``.
+    """
+    def __init__(self, field_names, shape, dtype=float, **kwargs):
+        """
+        Instantiate a PointListSet object.
+        Creates a PointList with field_names at each point of a 2D grid with a shape specified
+        by the shape argument.
+        """
+        DataObject.__init__(self, **kwargs)
+
+        self.field_names = field_names  #: the coordinates; see the PointList documentation
+        self.default_dtype = dtype      #: the default datatype; see the PointList documentation
+
+        self.shape = shape
+        self.ind_start = np.zeros(shape, dtype='int')
+        self.ind_stop = np.zeros(shape, dtype='int')
+        self.ind_current = np.array([0], dtype='int')
+
+        self.point_data = PointList(field_names)
+
+
+    def get_pointlist(self, ax, ay):
+        """
+        Returns the pointlist at ax,ay
+        """
+        return self.point_data.data[self.ind_start[ax,ay]:self.ind_stop[ax,ay]]
+
+
+    def set_pointlist(self, pointlist, ax, ay):
+        """
+        Stores the pointlist at ax,ay.
+        If point list doesn't exist, append to the list.  
+        If it does exist, replace it or append it depending on length.
+        """
+
+        num_points_init = self.ind_stop[ax,ay] - self.ind_start[ax,ay]
+        num_points_add = pointlist.data.shape
+
+        if num_points_init == 0 or num_points_add > num_points_init:
+            # print(self.point_data.data.dtype)
+            self.point_data.add_pointlist(pointlist)
+            self.ind_start[ax,ay] = self.ind_current
+            self.ind_stop[ax,ay] = self.ind_current + num_points_add 
+            self.ind_current += num_points_add
+
+        elif num_points_add == num_points_init:
+            self.point_data[self.ind_start[ax,ay]:self.ind_stop[ax,ay]] = pointlist
+
+        # elif num_points_add < num_points_init:
+        else:
+            self.ind_stop[ax,ay] = self.ind_start[ax,ay]+num_points_add
+            self.point_data[self.ind_start[ax,ay]:self.ind_stop[ax,ay]] = pointlist
+
+    def get_bragg_vector_map(self, Q_Nx, Q_Ny):
+        """
+        Calculates the Bragg vector map from a PointListSet of Bragg peak positions, given
+        braggpeak positions which have been centered about the origin. In the returned array
+        braggvectormap, the origin is placed at (Q_Nx/2.,Q_Ny/2.)
+
+        Args:
+            braggpeaks (PointListArray): Must have the coords 'qx','qy','intensity', the
+                default coordinates from the bragg peak detection fns
+            Q_Nx,Q_Ny (ints): the size of diffraction space in pixels
+
+        Returns:
+            (ndarray): the bragg vector map
+        """
+
+        qx0,qy0 = Q_Nx/2.,Q_Ny/2.
+        # for (Rx, Ry) in tqdmnd(self.shape[0],self.shape[1],
+        #                        desc='Computing Bragg vector map',unit='DP',unit_scale=True):
+        #     peaks = braggpeaks.get_pointlist(Rx,Ry)
+        #     for i in range(peaks.length):
+        #         qx = peaks.data['qx'][i]+qx0
+        #         qy = peaks.data['qy'][i]+qy0
+        #         I = peaks.data['intensity'][i]
+        #         braggvectormap = add_to_2D_array_from_floats(braggvectormap,qx,qy,I)
+        qx = self.point_data.data['qx']+qx0
+        qy = self.point_data.data['qy']+qy0
+        I = self.point_data.data['intensity']
+        # braggvectormap = add_to_2D_array_from_floats(braggvectormap,qx,qy,I)
+
+        # braggvectormap = np.zeros((Q_Nx,Q_Ny))
+        # braggvectormap = np.zeros(Q_Nx*Q_Ny)
+        inds = np.ravel_multi_index(
+            [np.round(qx).astype('int'),np.round(qy).astype('int')],(Q_Nx,Q_Ny)
+        )
+        braggvectormap = np.bincount(inds, I, minlength=Q_Nx*Q_Ny)
+        braggvectormap.shape = (Q_Nx,Q_Ny)
+
+        # numpy.ravel_multi_index(multi_index, dims, mode='raise', order='C')
+
+        return braggvectormap
