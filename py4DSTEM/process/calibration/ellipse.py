@@ -100,7 +100,13 @@ def ellipse_err(p, x, y, val):
 
 ###### Fitting from amorphous diffraction rings ######
 
-def fit_ellipse_amorphous_ring(data,center,fitradii,p0=None,mask=None):
+def fit_ellipse_amorphous_ring(
+    data,
+    center,
+    fitradii,
+    p0=None,
+    mask=None,
+    maxfev=0):
     """
     Fit the amorphous halo of a diffraction pattern, including any elliptical distortion.
 
@@ -153,6 +159,8 @@ def fit_ellipse_amorphous_ring(data,center,fitradii,p0=None,mask=None):
             to the main function, but if they are passed as elements of p0 these will
             take precendence.
         mask (2d array of bools): only fit to datapoints where mask is True
+        maxfev (int):   maximum number of function evaluations. Default is (N+1)*200 evals, 
+                        2400 for this function. Can be set lower to speed up fitting.
 
     Returns:
         (2-tuple comprised of a 5-tuple and an 11-tuple): Returns a 2-tuple.
@@ -208,7 +216,12 @@ def fit_ellipse_amorphous_ring(data,center,fitradii,p0=None,mask=None):
         _p0 = tuple([p0_guess[i] if p0[i] is None else p0[i] for i in range(len(p0))])
 
     # Perform fit
-    p = leastsq(double_sided_gaussian_fiterr, _p0, args=(x_inds, y_inds, vals))[0]
+    p = leastsq(
+        double_sided_gaussian_fiterr, 
+        _p0, 
+        args=(x_inds, y_inds, vals),
+        maxfev=maxfev,
+        )[0]
 
     # Return
     _x0,_y0 = p[6],p[7]

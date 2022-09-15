@@ -70,8 +70,8 @@ def convert_ellipse_params(A,B,C):
     else:
         theta = np.arctan2((C-A-val),B)
     # Get a,b
-    a = - np.sqrt( -2*b4a*(A+C+val) ) / b4a
-    b = - np.sqrt( -2*b4a*(A+C-val) ) / b4a
+    a = - np.sqrt(np.clip(-2*b4a*(A+C+val),0,None) ) / b4a
+    b = - np.sqrt(np.clip( -2*b4a*(A+C-val),0,None) ) / b4a
     a,b = max(a,b),min(a,b)
     return a,b,theta
 
