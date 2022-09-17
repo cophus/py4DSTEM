@@ -1,7 +1,7 @@
 # Functions to become DataCube methods
 
 import numpy as np
-from scipy.ndimage import distance_transform_edt, binary_fill_holes
+from scipy.ndimage import distance_transform_edt, binary_fill_holes, gaussian_filter
 
 
 # Add to tree
@@ -604,7 +604,9 @@ def find_Bragg_disks(
 def get_beamstop_mask(
     self,
     threshold = 0.25,
-    distance_edge = 4.0,
+    distance_edge = 1.0,
+    smoothing = 0.0,
+    flip_contrast = False,
     include_edges = True,
     name = "mask_beamstop",
     returncalc = True,
@@ -617,6 +619,7 @@ def get_beamstop_mask(
             taken from the sorted intensity values - 0 is the dimmest
             pixel, while 1 uses the brighted pixels.
         distance_edge: (float)  How many pixels to expand the mask.
+        smoothing (float):      Smoothing to apply to the image in pixels before making mask.
         include_edges: (bool)   If set to True, edge pixels will be included in the mask.
         name: (string)          Name of the output array.
         returncalc: (bool):     Set to true to return the result.
@@ -637,12 +640,18 @@ def get_beamstop_mask(
             0,int_sort.shape[0])).astype('int')
     intensity_threshold = int_sort[ind]
 
-    # Use threshold to calculate initial mask
-    mask_beamstop = self.tree["dp_mean"].data >= intensity_threshold
+    # smoothing
+    if smoothing == 0.0:
+        im_mean = self.tree["dp_mean"].data.copy()
+    else:
+        im_mean = gaussian_filter(self.tree["dp_mean"].data, smoothing, mode='nearest')
 
-    # clean up mask
-    mask_beamstop = np.logical_not(binary_fill_holes(np.logical_not(mask_beamstop)))
-    mask_beamstop = binary_fill_holes(mask_beamstop)
+    # Use threshold to calculate initial mask
+    mask_beamstop = im_mean >= intensity_threshold
+
+    # clean up mask - seems like this is not very stable!
+    # mask_beamstop = np.logical_not(binary_fill_holes(np.logical_not(mask_beamstop)))
+    # mask_beamstop = binary_fill_holes(mask_beamstop)
 
     # Edges
     if include_edges:
@@ -651,9 +660,12 @@ def get_beamstop_mask(
         mask_beamstop[-1,:] = False
         mask_beamstop[:,-1] = False
 
-
     # Expand mask
     mask_beamstop = distance_transform_edt(mask_beamstop) < distance_edge
+
+    if flip_contrast:
+        mask_beamstop = np.logical_not(mask_beamstop)
+
 
     # Output mask for beamstop
     self.name = name

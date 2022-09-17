@@ -16,7 +16,7 @@ the module docstring for process/utils/elliptical_coords.py.
 """
 
 import numpy as np
-from scipy.optimize import leastsq
+from scipy.optimize import leastsq, least_squares
 from scipy.ndimage.filters import gaussian_filter
 from py4DSTEM.process.utils import convert_ellipse_params, convert_ellipse_params_r
 from py4DSTEM.process.utils import get_CoM, radial_integral
@@ -106,7 +106,8 @@ def fit_ellipse_amorphous_ring(
     fitradii,
     p0=None,
     mask=None,
-    maxfev=0):
+    fitbounds=True,
+    ):
     """
     Fit the amorphous halo of a diffraction pattern, including any elliptical distortion.
 
@@ -159,6 +160,7 @@ def fit_ellipse_amorphous_ring(
             to the main function, but if they are passed as elements of p0 these will
             take precendence.
         mask (2d array of bools): only fit to datapoints where mask is True
+        fitbounds (bool):  If true, only positive values are allowed for intensity, sigma
         maxfev (int):   maximum number of function evaluations. Default is (N+1)*200 evals, 
                         2400 for this function. Can be set lower to speed up fitting.
 
@@ -196,11 +198,11 @@ def fit_ellipse_amorphous_ring(
 
     # Get initial parameter guesses
     I0 = np.max(data)
-    I1 = np.max(data*mask)
-    sigma0 = ri/2.
-    sigma1 = (ro-ri)/4.
-    sigma2 = (ro-ri)/4.
-    c_bkgd = np.min(data)
+    c_bkgd = np.min(data[_mask])
+    I1 = np.max(data[_mask]) - c_bkgd
+    sigma0 = ri/2.0
+    sigma1 = (ro-ri)/4.0
+    sigma2 = (ro-ri)/4.0
     # To guess R, we take a radial integral
     q,radial_profile = radial_integral(data,x0,y0,1)
     R = q[(q>ri)*(q<ro)][np.argmax(radial_profile[(q>ri)*(q<ro)])]
@@ -215,19 +217,33 @@ def fit_ellipse_amorphous_ring(
         assert len(p0)==11
         _p0 = tuple([p0_guess[i] if p0[i] is None else p0[i] for i in range(len(p0))])
 
-    # Perform fit
-    p = leastsq(
-        double_sided_gaussian_fiterr, 
-        _p0, 
-        args=(x_inds, y_inds, vals),
-        maxfev=maxfev,
-        )[0]
+    # Perform fitting
+    if fitbounds:
+        bounds = (
+            0,
+            np.inf,
+            )
+        result = least_squares(
+            double_sided_gaussian_fiterr,
+            _p0, 
+            args=(x_inds, y_inds, vals),
+            bounds = bounds,
+            jac=double_sided_gaussian_jac,
+            )
+        p = result.x
+    else:
+        p = leastsq(
+            double_sided_gaussian_fiterr, 
+            _p0, 
+            args=(x_inds, y_inds, vals),
+            )[0]
 
     # Return
     _x0,_y0 = p[6],p[7]
     _A,_B,_C = p[8],p[9],p[10]
     _a,_b,_theta = convert_ellipse_params(_A,_B,_C)
     return (_x0,_y0,_a,_b,_theta),p
+
 
 def double_sided_gaussian_fiterr(p, x, y, val):
     """
@@ -238,24 +254,117 @@ def double_sided_gaussian_fiterr(p, x, y, val):
 
 def double_sided_gaussian(p, x, y):
     """
-    Return the value of the double-sided gaussian function at point (x,y) given
+    Return the value of the double-sided gaussian function at points (x,y) given
     parameters p, described in detail in the fit_ellipse_amorphous_ring docstring.
     """
     # Unpack parameters
     I0, I1, sigma0, sigma1, sigma2, c_bkgd, x0, y0, A, B, C = p
-    a,b,theta = convert_ellipse_params(A,B,C)
-    R = np.mean((a,b))
-    R2 = R**2
-    A,B,C = A*R2,B*R2,C*R2
-    r2 = A*(x - x0)**2 + B*(x - x0)*(y - y0) + C*(y - y0)**2
+    
+    # Ellipse params
+    R2 = 1/np.sqrt(A*C-0.25*B**2)
+    R = np.sqrt(R2)
+    r2 = (A*R2)*(x - x0)**2 + (B*R2)*(x - x0)*(y - y0) + (C*R2)*(y - y0)**2
     r = np.sqrt(r2) - R
 
-    return (
-        I0 * np.exp(-r2 / (2 * sigma0 ** 2))
-        + I1 * np.exp(-r ** 2 / (2 * sigma1 ** 2)) * np.heaviside(-r, 0.5)
-        + I1 * np.exp(-r ** 2 / (2 * sigma2 ** 2)) * np.heaviside(r, 0.5)
-        + c_bkgd
-    )
+    # compute function
+    f = I0 * np.exp(r2 / (-2 * sigma0 ** 2)) + c_bkgd
+    sub = r < 0
+    f[sub] += I1 * np.exp(r[sub] ** 2 / (-2 * sigma1 ** 2))
+    sub = np.logical_not(sub)
+    f[sub] += I1 * np.exp(r[sub] ** 2 / (-2 * sigma2 ** 2))
+
+    # f = np.zeros_like(r)
+    # sub = r < 0
+    # f[sub] = c_bkgd + I0 * np.exp(r2[sub] / (-2 * sigma0 ** 2)) + I1 * np.exp(r[sub]**2 / (-2 * sigma1 ** 2))
+    # sub = np.logical_not(sub)
+    # f[sub] = c_bkgd + I0 * np.exp(r2[sub] / (-2 * sigma0 ** 2)) + I1 * np.exp(r[sub]**2 / (-2 * sigma2 ** 2))
+
+    # f = I0 * np.exp(-r2 / (2 * sigma0 ** 2)) \
+    #     + I1 * np.exp(-r ** 2 / (2 * sigma1 ** 2)) * np.heaviside(-r, 0.5) \
+    #     + I1 * np.exp(-r ** 2 / (2 * sigma2 ** 2)) * np.heaviside(r, 0.5) \
+    #     + c_bkgd
+
+    return f
+    # return (
+    #     I0 * np.exp(-r2 / (2 * sigma0 ** 2))
+    #     + I1 * np.exp(-r ** 2 / (2 * sigma1 ** 2)) * np.heaviside(-r, 0.5)
+    #     + I1 * np.exp(-r ** 2 / (2 * sigma2 ** 2)) * np.heaviside(r, 0.5)
+    #     + c_bkgd
+    # )
+
+def double_sided_gaussian_jac(p, x, y, val):
+    """
+    Return the jacobian of the double-sided Gaussian function as points (x,y) given
+    parameters p.
+    """
+
+
+    # Unpack parameters
+    I0, I1, sigma0, sigma1, sigma2, c_bkgd, x0, y0, A, B, C = p
+    
+    # Ellipse params
+    R2 = 1/np.sqrt(A*C-0.25*B**2)
+    R = np.sqrt(R2)
+    r2 = (A*R2)*(x - x0)**2 + (B*R2)*(x - x0)*(y - y0) + (C*R2)*(y - y0)**2
+    r1 = np.sqrt(r2) - R
+    r1_2 = r1**2
+
+    # Ranges
+    sub_i = r1 < 0
+    sub_o = np.logical_not(sub_i)
+
+    # init
+    f = np.zeros_like(r1)
+    J = np.ones((x.size,p.size))
+
+    # compute function
+    int_0 = I0 * np.exp(-r2 / (2 * sigma0 ** 2))
+    int_1 = I1 * np.exp(-r1_2[sub_i] / (2 * sigma1 ** 2))
+    int_2 = I1 * np.exp(-r1_2[sub_o] / (2 * sigma2 ** 2))
+    f = int_0 + c_bkgd
+    f[sub_i] += int_1
+    f[sub_o] += int_2
+
+    # J for intensities
+    J[:,0] = np.exp(r2 / (-2 * sigma0 ** 2))
+    J[sub_i,1] = np.exp(r2[sub_i] / (-2 * sigma1 ** 2))
+    J[sub_o,1] = np.exp(r2[sub_o] / (-2 * sigma2 ** 2))
+
+    # J for Gaussian standard deviations
+    J[:,2] = (-1/sigma0**3) * int_0 * r2
+    J[sub_i,3] = (-1/sigma1**3) * int_1 * r1_2[sub_i]
+    J[sub_o,4] = (-1/sigma2**3) * int_2 * r1_2[sub_o]
+
+    # Skip J for constant, since J initialized as ones
+
+    # Compute remainder numerically?
+    step = 1e-5
+    for a0 in range(6,11):
+        p_up = np.array(p)
+        p_down = np.array(p)
+        p_up[a0] += step
+        p_down[a0] -= step
+
+        J[:,a0] = (
+            double_sided_gaussian(tuple(p_up), x, y) - 
+            double_sided_gaussian(tuple(p_down), x, y)) / (2*step)
+
+    # J for x0,y0
+
+
+    # f = np.zeros_like(r)
+    # sub = r < 0
+    # f[sub] = c_bkgd + \
+    #     I0 * np.exp(-r2[sub] / (2 * sigma0 ** 2)) + \
+    #     I1 * np.exp(-r[sub] ** 2 / (2 * sigma1 ** 2))
+    # sub = np.logical_not(sub)
+    # f[sub] = c_bkgd + \
+    #     I0 * np.exp(-r2[sub] / (2 * sigma0 ** 2)) + \
+    #     I1 * np.exp(-r[sub] ** 2 / (2 * sigma2 ** 2))
+
+
+    return J
+
 
 ### Fit an ellipse to crystalline scattering with a known angle between peaks
 

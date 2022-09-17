@@ -1,10 +1,12 @@
 # These functions calculate strain in amorphous samples.
 
 import numpy as np
-from py4DSTEM.process.calibration import fit_ellipse_amorphous_ring
+from py4DSTEM.process.calibration import fit_ellipse_amorphous_ring, double_sided_gaussian
 from py4DSTEM.process.utils import tqdmnd
 from py4DSTEM.io.datastructure import RealSlice
+import matplotlib.pyplot as plt
 
+import logging
 import warnings
 warnings.filterwarnings("ignore", message="Number of calls to function has reached maxfev")
 warnings.filterwarnings("ignore", message="invalid value encountered in sqrt")
@@ -14,7 +16,9 @@ def fit_amorphous_halo(
     datacube,
     center,
     fitradii,
-    maxfev: int = 0,
+    mask = None,
+    fitbounds = True,
+    plot_mean_ellipse_fit = False,
     ):
     '''
     Loop through all probe positions and fit amorphous halo.
@@ -23,7 +27,11 @@ def fit_amorphous_halo(
         datacube (DataCube):            py4DSTEM datacube
         center (numpy.array):           (x,y) center coordinate guess in pixels
         fitradii (numpy.array):         (radius_inner,radius_outer) radial fitting range in pixels
+        mask (bool):                    Boolean mask - only pixels where mask = True will be used for fitting
         maxfev (int):                   Max number of function evals.  Set to <2400 to speed up fits.
+        plot_mean_ellipse_fit (bool):   Show the ellipse fitting to the mean diffraction pattern.
+                                        Note that if this option is true, we do not perform 
+                                        ellipse fitting on the individual probe positions.
 
     Returns:
         ellipse_params_11 (numpy.array):    11-param ellipse coefficients for each probe position
@@ -40,7 +48,10 @@ def fit_amorphous_halo(
         datacube.tree['dp_mean'].data, 
         center, 
         fitradii, 
+        mask=mask,
+        fitbounds=fitbounds,
     )
+    print(np.round(p11[8:],decimals=6))
     # update center guess
     center = (p11[6],p11[7])
 
@@ -50,20 +61,63 @@ def fit_amorphous_halo(
         datacube.data.shape[1],
         11,
     ))
-    
-    # main loop
-    for rx,ry in tqdmnd(datacube.data.shape[0],datacube.data.shape[1]):
-        _, p11_fit = fit_ellipse_amorphous_ring(
-            datacube.data[rx,ry],
-            center, 
-            fitradii, 
-            p0 = p11,
-            maxfev=maxfev,
-        )
-        ellipse_params_11[rx,ry,:] = p11_fit
+
+    # plotting
+    if plot_mean_ellipse_fit:
+        logging.warning(
+            "\nElliptic fitting on all probe positions not performed." + \
+            "\nSet plot_mean_ellipse_fit=False to perform fitting.",
+            stacklevel=0,
+            )
+
+        fig,ax = plt.subplots(1,2,figsize=(16,8))
+
+        yy,xx = np.meshgrid(
+            np.arange(datacube.tree['dp_mean'].data.shape[1]),
+            np.arange(datacube.tree['dp_mean'].data.shape[0]),
+            )
+        im_fit = double_sided_gaussian(
+            p11,
+            xx,
+            yy,
+            )
+        if mask is not None:
+            vmin = np.min(im_fit[mask])
+            vmax = np.max(im_fit[mask])
+        else:
+            vmin = np.min(im_fit)
+            vmax = np.max(im_fit)
+
+        ax[0].imshow(
+            datacube.tree['dp_mean'].data,
+            vmin=vmin,
+            vmax=vmax,
+            cmap='turbo',
+            )
+        ax[0].set_title('Measured Mean Diffraction Pattern', fontsize=16)
+        ax[1].imshow(
+            im_fit,
+            vmin=vmin,
+            vmax=vmax,
+            cmap='turbo',
+            )
+        ax[1].set_title('Fiting of Mean Diffraction Pattern', fontsize=16)
+        plt.show()
+
+    else:
+        for rx,ry in tqdmnd(datacube.data.shape[0],datacube.data.shape[1]):
+            _, p11_fit = fit_ellipse_amorphous_ring(
+                datacube.data[rx,ry],
+                center, 
+                fitradii, 
+                p0 = p11,
+                mask=mask,
+                fitbounds=fitbounds,
+            )
+            ellipse_params_11[rx,ry,:] = p11_fit
 
     
-    return ellipse_params_11
+        return ellipse_params_11
 
 
 
@@ -107,7 +161,7 @@ def get_strain_amorphous(
     if print_ref:
         print('reference (A,B,C) = ' + \
             f"({ABC_ref[0]:.6f},{ABC_ref[1]:.6f},{ABC_ref[2]:.6f})")
-        
+
 
     # # Transformation matrix is defined as the eigendecomposition of this ellipse matrix: 
     # m_ellipse = np.array([[ABC_ref[0], ABC_ref[1]/2], [ABC_ref[1]/2, ABC_ref[2]]])
