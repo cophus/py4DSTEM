@@ -228,7 +228,7 @@ def fit_ellipse_amorphous_ring(
             _p0, 
             args=(x_inds, y_inds, vals),
             bounds = bounds,
-            jac=double_sided_gaussian_jac,
+            # jac=double_sided_gaussian_jac,
             )
         p = result.x
     else:
@@ -298,7 +298,6 @@ def double_sided_gaussian_jac(p, x, y, val):
     parameters p.
     """
 
-
     # Unpack parameters
     I0, I1, sigma0, sigma1, sigma2, c_bkgd, x0, y0, A, B, C = p
     
@@ -313,8 +312,8 @@ def double_sided_gaussian_jac(p, x, y, val):
     sub_i = r1 < 0
     sub_o = np.logical_not(sub_i)
 
-    # init
-    f = np.zeros_like(r1)
+    # # init
+    # f = np.zeros_like(r1)
     J = np.ones((x.size,p.size))
 
     # compute function
@@ -327,18 +326,16 @@ def double_sided_gaussian_jac(p, x, y, val):
 
     # J for intensities
     J[:,0] = np.exp(r2 / (-2 * sigma0 ** 2))
-    J[sub_i,1] = np.exp(r2[sub_i] / (-2 * sigma1 ** 2))
-    J[sub_o,1] = np.exp(r2[sub_o] / (-2 * sigma2 ** 2))
+    J[sub_i,1] = np.exp(r1_2[sub_i] / (-2 * sigma1 ** 2))
+    J[sub_o,1] = np.exp(r1_2[sub_o] / (-2 * sigma2 ** 2))
 
     # J for Gaussian standard deviations
-    J[:,2] = (-1/sigma0**3) * int_0 * r2
-    J[sub_i,3] = (-1/sigma1**3) * int_1 * r1_2[sub_i]
-    J[sub_o,4] = (-1/sigma2**3) * int_2 * r1_2[sub_o]
-
-    # Skip J for constant, since J initialized as ones
+    J[:,2] = (1/sigma0**3) * int_0 * r2
+    J[sub_i,3] = (1/sigma1**3) * int_1 * r1_2[sub_i]
+    J[sub_o,4] = (1/sigma2**3) * int_2 * r1_2[sub_o]
 
     # Compute remainder numerically?
-    step = 1e-5
+    step = 1e-6
     for a0 in range(6,11):
         p_up = np.array(p)
         p_down = np.array(p)
@@ -348,20 +345,6 @@ def double_sided_gaussian_jac(p, x, y, val):
         J[:,a0] = (
             double_sided_gaussian(tuple(p_up), x, y) - 
             double_sided_gaussian(tuple(p_down), x, y)) / (2*step)
-
-    # J for x0,y0
-
-
-    # f = np.zeros_like(r)
-    # sub = r < 0
-    # f[sub] = c_bkgd + \
-    #     I0 * np.exp(-r2[sub] / (2 * sigma0 ** 2)) + \
-    #     I1 * np.exp(-r[sub] ** 2 / (2 * sigma1 ** 2))
-    # sub = np.logical_not(sub)
-    # f[sub] = c_bkgd + \
-    #     I0 * np.exp(-r2[sub] / (2 * sigma0 ** 2)) + \
-    #     I1 * np.exp(-r[sub] ** 2 / (2 * sigma2 ** 2))
-
 
     return J
 
