@@ -899,6 +899,7 @@ def find_Bragg_disks(
     self,
 
     template,
+    mask = None,
     data = None,
 
     filter_function = None,
@@ -1048,7 +1049,7 @@ def find_Bragg_disks(
     peaks = find_Bragg_disks(
         data = x,
         template = template,
-
+        mask = mask,
         filter_function = filter_function,
 
         corrPower = corrPower,

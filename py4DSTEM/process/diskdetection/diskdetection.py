@@ -17,7 +17,7 @@ from py4DSTEM.process.diskdetection.diskdetection_aiml import find_Bragg_disks_a
 def find_Bragg_disks(
     data,
     template,
-
+    mask = None,
     filter_function = None,
 
     corrPower = 1,
@@ -93,6 +93,8 @@ def find_Bragg_disks(
         template (2D array): the vacuum probe template, in real space. For
             Probe instances, this is `probe.kernel`.  If None, does not perform
             a cross correlation.
+        mask (2D array):     A mask for the data, typically for a beamstop.
+                             Correlation operation will be normalized by this mask.
         filter_function (callable): filtering function to apply to each
             diffraction pattern before peakfinding. Must be a function of only
             one argument (the diffraction pattern) and return the filtered
@@ -237,6 +239,7 @@ def find_Bragg_disks(
     ans = fn(
         data,
         template,
+        mask = None,
         filter_function = filter_function,
         corrPower = corrPower,
         sigma = sigma,
@@ -279,6 +282,7 @@ def _get_function_dictionary():
 def _find_Bragg_disks_single(
     DP,
     template,
+    mask = None,
     filter_function = None,
     corrPower = 1,
     sigma = 2,
@@ -294,8 +298,7 @@ def _find_Bragg_disks_single(
     _template_space = 'real'
     ):
 
-
-   # apply filter function
+    # apply filter function
     er = "filter_function must be callable"
     if filter_function: assert callable(filter_function), er
     DP = DP if filter_function is None else filter_function(DP)
@@ -321,6 +324,7 @@ def _find_Bragg_disks_single(
             template_FT,
             corrPower,
             'fourier',
+            mask = mask,
         )
 
 
@@ -379,6 +383,7 @@ def _find_Bragg_disks_single(
 def _find_Bragg_disks_stack(
     dp_stack,
     template,
+    mask = None,
     filter_function = None,
     corrPower = 1,
     sigma = 2,

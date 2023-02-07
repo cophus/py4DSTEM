@@ -9,7 +9,8 @@ def get_cross_correlation(
     ar,
     template,
     corrPower=1,
-    _returnval='real'):
+    _returnval='real'
+    ):
     """
     Get the cross/phase/hybrid correlation of `ar` with `template`, where
     the latter is in real space.
@@ -30,7 +31,8 @@ def get_cross_correlation_FT(
     ar,
     template_FT,
     corrPower = 1,
-    _returnval = 'real'
+    _returnval = 'real',
+    mask = None,
     ):
     """
     Get the cross/phase/hybrid correlation of `ar` with `template_FT`, where
@@ -40,9 +42,16 @@ def get_cross_correlation_FT(
     If _returnval is 'real', returns the real-valued cross-correlation.
     Otherwise, returns the complex valued result.
     """
+
     assert(_returnval in ('real','fourier'))
-    m = np.fft.fft2(ar) * template_FT
-    cc = np.abs(m)**(corrPower) * np.exp(1j*np.angle(m))
+
+    if corrPower == 1:
+        cc = np.fft.fft2(ar) * template_FT
+    else:
+        m = np.fft.fft2(ar) * template_FT
+        cc = np.abs(m)**(corrPower) * np.exp(1j*np.angle(m))
+    
+
     if _returnval == 'real':
         cc = np.maximum(np.real(np.fft.ifft2(cc)),0)
     return cc
