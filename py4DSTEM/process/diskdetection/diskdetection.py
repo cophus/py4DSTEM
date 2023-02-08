@@ -239,7 +239,7 @@ def find_Bragg_disks(
     ans = fn(
         data,
         template,
-        mask = None,
+        mask = mask,
         filter_function = filter_function,
         corrPower = corrPower,
         sigma = sigma,
@@ -307,7 +307,6 @@ def _find_Bragg_disks_single(
     if template is None:
         cc = DP
     else:
-
 
         # fourier transform the template
         assert _template_space in ('real','fourier')
@@ -406,6 +405,7 @@ def _find_Bragg_disks_stack(
         peaks =_find_Bragg_disks_single(
             dp,
             template,
+            mask = mask,
             filter_function = filter_function,
             corrPower = corrPower,
             sigma = sigma,

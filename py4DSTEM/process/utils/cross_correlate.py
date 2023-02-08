@@ -1,8 +1,7 @@
 # Cross correlation function
 
 import numpy as np
-
-
+import matplotlib.pyplot as plt
 
 
 def get_cross_correlation(
@@ -34,6 +33,7 @@ def get_cross_correlation_FT(
     _returnval = 'real',
     mask = None,
     ):
+
     """
     Get the cross/phase/hybrid correlation of `ar` with `template_FT`, where
     the latter is already in Fourier space (i.e. `template_FT` is
@@ -45,12 +45,51 @@ def get_cross_correlation_FT(
 
     assert(_returnval in ('real','fourier'))
 
-    if corrPower == 1:
-        cc = np.fft.fft2(ar) * template_FT
+    if mask is None:
+        # unnormalized correlation
+        if corrPower == 1:
+            cc = np.fft.fft2(ar) * template_FT
+        else:
+            m = np.fft.fft2(ar) * template_FT
+            cc = np.abs(m)**(corrPower) * np.exp(1j*np.angle(m))
     else:
-        m = np.fft.fft2(ar) * template_FT
-        cc = np.abs(m)**(corrPower) * np.exp(1j*np.angle(m))
-    
+        # normalized correlation
+        if corrPower == 1:
+            # cc = np.real(np.fft.ifft2(np.fft.fft2(ar * mask) * template_FT)) 
+
+            ar_fft = np.fft.fft2(ar)
+            mask_fft = np.fft.fft2(mask)
+            template = np.fft.ifft2(template_FT)
+
+            cc = np.real(np.fft.ifft2(np.fft.fft2(ar * mask) * template_FT)) 
+
+            # normalize the correlation
+            # cc_norm = 
+            # cc_norm = (mask - 1) * 
+            term_0 = np.real(np.fft.ifft2(mask_fft * template_FT))
+            cc_norm_num = ar * term_0
+            cc_norm_den = 1 * \
+                ( np.fft.ifft2(np.fft.fft2(template**2) * mask_fft) * mask - term_0)
+
+            # cc_norm = np.real(np.fft.ifft2(np.fft.fft2(mask) * template_FT))
+            # # sub = np.logical_and(cc_norm > 0.01*np.max(np.abs(cc_norm)), cc > 0)
+            # # cc[sub] /= cc_norm[sub]
+            # # cc[np.logical_not(sub)] = 0
+            # thresh = np.max(cc_norm) * 0.001
+            # # sub = cc_norm
+            
+            fig,ax = plt.subplots(figsize=(20,7))
+            ax.imshow(
+                # np.real(cc_norm_den),
+                np.hstack((cc * mask, cc_norm_num)),
+                # cc / cc_norm,
+                vmin = 0,
+                vmax = 4,
+                cmap='turbo',
+                )
+
+            cc = np.fft.fft2(cc)
+
 
     if _returnval == 'real':
         cc = np.maximum(np.real(np.fft.ifft2(cc)),0)
