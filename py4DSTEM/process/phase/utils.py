@@ -618,6 +618,73 @@ def generate_batches(
         start = end
 
 
+def auto_stream_batches(
+    batch_size: int,
+    constant: list[np.ndarray] = [],
+    inout: list[np.ndarray] = [],
+):
+    """
+    Subdivide CPU arrays into batches along the first axis and copy them to the GPU for processing.
+    Arrays passed in ``constant`` are copied to the GPU and discarded.
+    Arrays passed in ``inout`` are copied to the GPU at the start of the loop and 
+        their modified contents on the GPU are written back to the CPU array at the end of the loop.
+    Inout arrays must be modified in place in order to propagate back to the parent!
+
+    Returns: list of cp.ndarray, [*device_consant, *device_inout]
+    """
+    
+    # Check arrays were passed in lists
+    assert isinstance(constant,list), "Must pass a *list* of arrays"
+    assert isinstance(inout,list), "Must pass a *list* of arrays"
+    
+    # Check that some arrays were passed
+    all_arrays = constant + inout
+    assert len(all_arrays) > 0, "No arrays passed! What am I supposed to do?"
+    
+    # check that all arrays have the same shape along the batching dimensions
+    # (broadcasting should take care of any shape mismatch along other dimensions) 
+    batching_shapes = [arr.shape[0] for arr in all_arrays]
+
+    def all_equal(iterator):
+        iterator = iter(iterator)
+        try:
+            first = next(iterator)
+        except StopIteration:
+            return True
+        return all(first == x for x in iterator)
+
+    assert all_equal(batching_shapes), "Arrays do not have equal shapes along the first dimension"
+    
+    # compute number of batches
+    num_elements = batching_shapes[0] # total number of elements in the batching axes
+    num_batches = num_elements // batch_size + 1
+    
+    # preallocate GPU arrays for the batches
+    device_constant = [cp.zeros((batch_size,) + a.shape[1:], dtype=a.dtype) for a in constant]
+    device_inout = [cp.zeros((batch_size,) + a.shape[1:], dtype=a.dtype) for a in inout]
+    all_device_arrays = device_constant + device_inout
+    
+    for batch_idx in range(num_batches):
+        # final batch may be smaller than batch_size
+        elements_remaining = num_elements - (batch_idx * batch_size)
+        this_batch_size = elements_remaining if elements_remaining < batch_size else batch_size
+        
+        offset = batch_idx * batch_size
+        parent_slice = slice(offset, offset + this_batch_size) # slice into original array to get this batch
+        batch_slice = slice(this_batch_size) # slice into device array to get valid batch data
+        
+        # copy array data to the device
+        # doing this in bulk probably has a memory overhead, which may be optimized better
+        # such as by transferring one element at a time. profiling needed
+        for device_arr, parent_arr in zip(all_device_arrays, all_arrays):
+            device_arr[batch_slice] = cp.asarray(parent_arr[parent_slice])
+            
+        yield device_constant + device_inout  # generate the batched device arrays
+        
+        # copy data back from the in/out arrays to the host arrays
+        for device_arr, parent_arr in zip(device_inout, inout):
+            parent_arr[parent_slice] = device_arr[batch_slice].get()
+
 #### Affine transformation functions
 
 
