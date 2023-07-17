@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy.ndimage import (binary_opening, binary_dilation,
-    distance_transform_edt, binary_fill_holes, gaussian_filter1d)
+    distance_transform_edt, binary_fill_holes, gaussian_filter1d, gaussian_filter)
 from typing import Optional,Union
 
 from emdfile import Array, Metadata, Node, Root, tqdmnd
@@ -1066,6 +1066,7 @@ class DataCube(
             if not "dp_mean" in self._branch.keys():
                 self.get_dp_mean();
             im = self.tree("dp_mean").data.copy()
+
             # if not "dp_mean" in self.tree.keys():
             #     self.get_dp_mean();
             # im = self.tree["dp_mean"].data.astype('float')
