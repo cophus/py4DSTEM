@@ -67,6 +67,7 @@ class CrystalPhase:
         corr_kernel_size = 0.02,
         corr_distance_scale = 1.0,
         include_false_positives = True,
+        weight_false_positives = 1.0,
         max_number_phases = 3,
         sigma_excitation_error = 0.02,
         power_experiment = 0.5,
@@ -208,7 +209,7 @@ class CrystalPhase:
             for a0 in range(len(unpaired_peaks)):
                 basis_aug[a0,unpaired_peaks[a0][0]] = unpaired_peaks[a0][1]
 
-            basis = np.vstack((basis, basis_aug))
+            basis = np.vstack((basis, basis_aug * weight_false_positives))
             obs = np.hstack((intensity, np.zeros(len(unpaired_peaks))))
 
         else:
@@ -440,6 +441,7 @@ class CrystalPhase:
         corr_kernel_size = 0.02,
         corr_distance_scale = 1.0,
         include_false_positives = True,
+        weight_false_positives = 1.0,
         max_number_phases = 3,
         sigma_excitation_error = 0.02,
         power_experiment = 0.5,
@@ -478,6 +480,7 @@ class CrystalPhase:
                 corr_kernel_size = corr_kernel_size,
                 corr_distance_scale = corr_distance_scale,
                 include_false_positives = include_false_positives,
+                weight_false_positives = weight_false_positives,
                 max_number_phases = max_number_phases,
                 sigma_excitation_error = sigma_excitation_error,
                 power_experiment = power_experiment,

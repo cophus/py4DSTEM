@@ -1136,15 +1136,15 @@ def plot_orientation_maps(
     ):
         if self.pymatgen_available:
             basis_x[rx, ry, :] = (
-                A @ orientation_map.family[rx, ry, orientation_ind, :, 0]
+                A @ self.orientation_map.family[rx, ry, orientation_ind, :, 0]
             )
             basis_y[rx, ry, :] = (
-                A @ orientation_map.family[rx, ry, orientation_ind, :, 1]
+                A @ self.orientation_map.family[rx, ry, orientation_ind, :, 1]
             )
             basis_x[rx, ry, :] = basis_x[rx, ry, :] * ct + basis_y[rx, ry, :] * st
 
             basis_z[rx, ry, :] = (
-                A @ orientation_map.family[rx, ry, orientation_ind, :, 2]
+                A @ self.orientation_map.family[rx, ry, orientation_ind, :, 2]
             )
         else:
             basis_z[rx, ry, :] = (
@@ -1498,7 +1498,7 @@ def plot_orientation_maps(
         self.orientation_map.num_x,
         self.orientation_map.num_y,
         3,2))
-    images_orientation = np.zeros((orientation_map.num_x, orientation_map.num_y, 3, 2))
+    images_orientation = np.zeros((self.orientation_map.num_x, self.orientation_map.num_y, 3, 2))
     if self.pymatgen_available:
         images_orientation[:, :, :, 0] = rgb_x
     images_orientation[:, :, :, 1] = rgb_z
