@@ -1583,7 +1583,7 @@ class ParallaxReconstruction(PhaseReconstruction):
         inds_1D = xp.ravel_multi_index(
             [xF  , yF  ],
             output_shape,
-            mode = ["clip", "clip"],
+            mode = ["wrap", "wrap"],
         )
         weights = (1 - dx) * (1 - dy)
         pix_count = xp.bincount(
@@ -1601,7 +1601,7 @@ class ParallaxReconstruction(PhaseReconstruction):
         inds_1D = xp.ravel_multi_index(
             [xF+1, yF  ],
             output_shape,
-            mode = ["clip", "clip"],
+            mode = ["wrap", "wrap"],
         )
         weights = (    dx) * (1 - dy)
         pix_count += xp.bincount(
@@ -1619,7 +1619,7 @@ class ParallaxReconstruction(PhaseReconstruction):
         inds_1D = xp.ravel_multi_index(
             [xF  , yF+1],
             output_shape,
-            mode = ["clip", "clip"],
+            mode = ["wrap", "wrap"],
         )
         weights = (1 - dx) * (    dy)
         pix_count += xp.bincount(
@@ -1637,7 +1637,7 @@ class ParallaxReconstruction(PhaseReconstruction):
         inds_1D = xp.ravel_multi_index(
             [xF+1, yF+1],
             output_shape,
-            mode = ["clip", "clip"],
+            mode = ["wrap", "wrap"],
         )
         weights = (     dx) * (    dy)
         pix_count += xp.bincount(
