@@ -572,6 +572,7 @@ class SingleslicePtychography(
         max_batch_size: int = None,
         seed_random: int = None,
         step_size: float = 0.5,
+        accelerated_gradient_descent = False,
         normalization_min: float = 1,
         positions_step_size: float = 0.5,
         pure_phase_object: bool = False,
@@ -642,6 +643,8 @@ class SingleslicePtychography(
             Seeds the random number generator, only applicable when max_batch_size is not None
         step_size: float, optional
             Update step size
+        accelerated_gradient_descent: bool
+            Use Nesterov accelerated gradient descent.
         normalization_min: float, optional
             Probe normalization minimum as a fraction of the maximum overlap intensity
         positions_step_size: float, optional
@@ -792,6 +795,13 @@ class SingleslicePtychography(
 
         # initialization
         self._reset_reconstruction(store_iterations, reset)
+
+        # TEMP - adding acceleration for testing
+        self._accelerated_gradient_descent = accelerated_gradient_descent
+        if accelerated_gradient_descent:
+            self._accel_a = np.atleast_1d(0.0)
+            self._accel_g = np.atleast_1d(0.0)
+
 
         # main loop
         for a0 in tqdmnd(

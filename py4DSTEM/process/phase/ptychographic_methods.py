@@ -1727,18 +1727,45 @@ class ObjectNDProbeMethodsMixin:
         )
 
         if self._object_type == "potential":
-            current_object += step_size * (
-                self._sum_overlapping_patches_bincounts(
-                    xp.real(
-                        -1j
-                        * xp.conj(object_patches)
-                        * xp.conj(shifted_probes)
-                        * exit_waves
-                    ),
-                    positions_px,
+            if self._accelerated_gradient_descent == False:
+                current_object += step_size * (
+                    self._sum_overlapping_patches_bincounts(
+                        xp.real(
+                            -1j
+                            * xp.conj(object_patches)
+                            * xp.conj(shifted_probes)
+                            * exit_waves
+                        ),
+                        positions_px,
+                    )
+                    * probe_normalization
                 )
-                * probe_normalization
-            )
+            else:
+                current_iter = len(self.object_iterations)
+                # print(self._accel_a.size, current_iter)
+                if self._accel_a.size < current_iter + 1:
+                    self._accel_a = xp.append(self._accel_a, (1+xp.sqrt(1+4*self._accel_a[current_iter-1]))/2.0)
+                    self._accel_g = xp.append(self._accel_g, (1-self._accel_a[current_iter-1])/self._accel_a[current_iter])
+                    # print(self._accel_a, self._accel_g)
+
+                if current_iter == 0:
+                    # First iteration as normal GD
+                    current_object += step_size * (
+                        self._sum_overlapping_patches_bincounts(
+                            xp.real(
+                                -1j
+                                * xp.conj(object_patches)
+                                * xp.conj(shifted_probes)
+                                * exit_waves
+                            ),
+                            positions_px,
+                        )
+                        * probe_normalization
+                    )
+                else:
+                    # Accelerated iterations
+                    
+                
         else:
             current_object += step_size * (
                 self._sum_overlapping_patches_bincounts(
