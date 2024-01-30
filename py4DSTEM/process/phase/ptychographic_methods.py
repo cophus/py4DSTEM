@@ -1748,7 +1748,8 @@ class ObjectNDProbeMethodsMixin:
 
                     # print(self._accel_a,self._accel_g)
 
-                if current_iter < 1:
+
+                if self._accel_start is False:
                     # First iteration as normal GD
                     current_object += step_size * (
                         self._sum_overlapping_patches_bincounts(
@@ -1762,10 +1763,12 @@ class ObjectNDProbeMethodsMixin:
                         )
                         * probe_normalization
                     )
+                    self._accel_object = current_object
                     self._accel_prev_object = current_object
+                    self._accel_start = True
                 else:
                     # Accelerated iterations
-                    object_temp = current_object + \
+                    current_object = self._accel_object + \
                         step_size * self._sum_overlapping_patches_bincounts(
                             xp.real(
                                 -1j
@@ -1775,12 +1778,17 @@ class ObjectNDProbeMethodsMixin:
                             ),
                             positions_px,
                         ) * probe_normalization
+                    self._accel_prev_object = self._accel_object
+                    self._accel_object = xp.array(1 - self._accel_g[current_iter]) * current_object \
+                         + xp.array(self._accel_g[current_iter]) * xp.array(self._accel_prev_object)
+
+
 
                     # scale = object_patches.shape[0] / self._num_diffraction_patterns 
-                    scale = np.sqrt(self._accel_g[current_iter])
-                    current_object = xp.array(1 - scale) * object_temp \
-                         + scale * xp.array(self._accel_prev_object)
-                    self._accel_prev_object = object_temp
+                    # scale = self._accel_g[current_iter]
+                    # current_object = xp.array(1 - scale) * object_temp \
+                    #      + scale * xp.array(self._accel_prev_object)
+                    # self._accel_prev_object = object_temp
 
 
                         # + xp.array(self._accel_g[current_iter]) * xp.array(self.object_iterations[current_iter-1])

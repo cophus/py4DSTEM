@@ -802,6 +802,7 @@ class SingleslicePtychography(
             current_iter = len(self.object_iterations)
             self._accel_a = np.ones(current_iter)
             self._accel_g = np.zeros(current_iter)
+            self._accel_start = False
 
 
         # main loop
