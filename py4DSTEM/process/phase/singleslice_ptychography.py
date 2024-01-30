@@ -799,8 +799,9 @@ class SingleslicePtychography(
         # TEMP - adding acceleration for testing
         self._accelerated_gradient_descent = accelerated_gradient_descent
         if accelerated_gradient_descent:
-            self._accel_a = np.atleast_1d(0.0)
-            self._accel_g = np.atleast_1d(0.0)
+            current_iter = len(self.object_iterations)
+            self._accel_a = np.ones(current_iter)
+            self._accel_g = np.zeros(current_iter)
 
 
         # main loop
@@ -937,6 +938,11 @@ class SingleslicePtychography(
             if store_iterations:
                 self.object_iterations.append(asnumpy(self._object).copy())
                 self.probe_iterations.append(self.probe_centered)
+
+            # if accelerated_gradient_descent:
+            #     self._accel_prev_object = self.object
+        
+
 
         # store result
         self.object = asnumpy(self._object)
