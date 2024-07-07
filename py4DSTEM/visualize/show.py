@@ -76,7 +76,9 @@ def show(
     theta=None,
     title=None,
     show_fft=False,
+    apply_hanning_window=True,
     show_cbar=False,
+    interpolation=None,
     **kwargs,
 ):
     """
@@ -305,6 +307,8 @@ def show(
             which will attempt to use it to overlay a scalebar. If True, uses calibraiton or pixelsize/pixelunits
             for scalebar. If False, no scalebar is added.
         show_fft (bool): if True, plots 2D-fft of array
+        apply_hanning_window (bool)
+            If True, a 2D Hann window is applied to the array before applying the FFT
         show_cbar (bool) : if True, adds cbar
         **kwargs: any keywords accepted by matplotlib's ax.matshow()
 
@@ -369,9 +373,12 @@ def show(
             from py4DSTEM.visualize import show
 
             if show_fft:
-                n0 = ar.shape
-                w0 = np.hanning(n0[1]) * np.hanning(n0[0])[:, None]
-                ar = np.abs(np.fft.fftshift(np.fft.fft2(w0 * ar.copy())))
+                if apply_hanning_window:
+                    n0 = ar.shape
+                    w0 = np.hanning(n0[1]) * np.hanning(n0[0])[:, None]
+                    ar = np.abs(np.fft.fftshift(np.fft.fft2(w0 * ar.copy())))
+                else:
+                    ar = np.abs(np.fft.fftshift(np.fft.fft2(ar.copy())))
             for a0 in range(num_images):
                 im = show(
                     ar[a0],
@@ -451,7 +458,12 @@ def show(
     # Otherwise, plot one image
     if show_fft:
         if combine_images is False:
-            ar = np.abs(np.fft.fftshift(np.fft.fft2(ar.copy())))
+            if apply_hanning_window:
+                n0 = ar.shape
+                w0 = np.hanning(n0[1]) * np.hanning(n0[0])[:, None]
+                ar = np.abs(np.fft.fftshift(np.fft.fft2(w0 * ar.copy())))
+            else:
+                ar = np.abs(np.fft.fftshift(np.fft.fft2(ar.copy())))
 
     # get image from a masked array
     if mask is not None:
@@ -604,7 +616,14 @@ def show(
 
         # Plot the image
         if not hist:
-            cax = ax.matshow(_ar, vmin=vmin, vmax=vmax, cmap=cm, **kwargs)
+            cax = ax.matshow(
+                _ar,
+                vmin=vmin,
+                vmax=vmax,
+                cmap=cm,
+                interpolation=interpolation,
+                **kwargs,
+            )
             if np.any(_ar.mask):
                 mask_display = np.ma.array(data=_ar.data, mask=~_ar.mask)
                 ax.matshow(
@@ -612,7 +631,7 @@ def show(
                 )
             if show_cbar:
                 ax_divider = make_axes_locatable(ax)
-                c_axis = ax_divider.append_axes("right", size="7%")
+                c_axis = ax_divider.append_axes("right", size="5%", pad="2.5%")
                 fig.colorbar(cax, cax=c_axis)
         # ...or, plot its histogram
         else:
@@ -795,6 +814,7 @@ def show(
             ax.set_yticks([])
 
     # Show or return
+
     returnval = []
     if returnfig:
         returnval.append((fig, ax))
@@ -811,6 +831,7 @@ def show(
         returnval.append(cax)
     if len(returnval) == 0:
         if figax is None:
+            plt.tight_layout()
             plt.show()
         return
     elif (len(returnval)) == 1:
