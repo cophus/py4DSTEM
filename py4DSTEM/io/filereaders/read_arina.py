@@ -12,6 +12,8 @@ def read_arina(
     binfactor: int = 1,
     dtype_bin: float = None,
     flatfield: np.ndarray = None,
+    median_filter_masked_pixels_array: np.ndarray = None,
+    median_filter_masked_pixels_kernel: int = 4,
 ):
     """
     File reader for arina 4D-STEM datasets
@@ -27,7 +29,7 @@ def read_arina(
         dtype_bin(float): specify datatype for bin on load if need something
             other than uint16
         flatfield (np.ndarray):
-            flatfield forcorrection factors
+            flatfield for correction factors, converts data to float
 
     Returns:
         DataCube
@@ -51,12 +53,15 @@ def read_arina(
         nimages % scan_width < 1e-6
     ), "scan_width must be integer multiple of x*y size"
 
-    if dtype.type is np.uint32:
+    if dtype.type is np.uint32 and flatfield is None:
         print("Dataset is uint32 but will be converted to uint16")
         dtype = np.dtype(np.uint16)
 
     if dtype_bin:
         array_3D = np.empty((nimages, width, height), dtype=dtype_bin)
+    elif flatfield is not None:
+        array_3D = np.empty((nimages, width, height), dtype="float32")
+        print("Dataset is uint32 but will be converted to float32")
     else:
         array_3D = np.empty((nimages, width, height), dtype=dtype)
 
@@ -65,9 +70,9 @@ def read_arina(
     if flatfield is None:
         correction_factors = 1
     else:
-        # Avoid div by 0 errors -> pixel with value 0 will be set to meadian
-        flatfield[flatfield == 0] = 1
         correction_factors = np.median(flatfield) / flatfield
+        # Avoid div by 0 errors -> pixel with value 0 will be set to median
+        correction_factors[flatfield == 0] = 1
 
     for dset in f["entry"]["data"]:
         image_index = _processDataSet(
@@ -76,6 +81,8 @@ def read_arina(
             array_3D,
             binfactor,
             correction_factors,
+            median_filter_masked_pixels_array,
+            median_filter_masked_pixels_kernel,
         )
 
     if f.__bool__():
@@ -92,23 +99,50 @@ def read_arina(
         )
     )
 
+    if median_filter_masked_pixels_array is not None and binfactor == 1:
+        datacube = datacube.median_filter_masked_pixels(
+            median_filter_masked_pixels_array, median_filter_masked_pixels_kernel
+        )
+
     return datacube
 
 
-def _processDataSet(dset, start_index, array_3D, binfactor, correction_factors):
+def _processDataSet(
+    dset,
+    start_index,
+    array_3D,
+    binfactor,
+    correction_factors,
+    median_filter_masked_pixels_array,
+    median_filter_masked_pixels_kernel,
+):
     image_index = start_index
     nimages_dset = dset.shape[0]
+
+    if median_filter_masked_pixels_array is not None and binfactor != 1:
+        from py4DSTEM.preprocess import median_filter_masked_pixels_2D
 
     for i in range(nimages_dset):
         if binfactor == 1:
             array_3D[image_index] = np.multiply(
                 dset[i].astype(array_3D.dtype), correction_factors
             )
+
         else:
-            array_3D[image_index] = bin2D(
-                np.multiply(dset[i].astype(array_3D.dtype), correction_factors),
-                binfactor,
-            )
+            if median_filter_masked_pixels_array is not None:
+                array_3D[image_index] = bin2D(
+                    median_filter_masked_pixels_2D(
+                        np.multiply(dset[i].astype(array_3D.dtype), correction_factors),
+                        median_filter_masked_pixels_array,
+                        median_filter_masked_pixels_kernel,
+                    ),
+                    binfactor,
+                )
+            else:
+                array_3D[image_index] = bin2D(
+                    np.multiply(dset[i].astype(array_3D.dtype), correction_factors),
+                    binfactor,
+                )
 
         image_index = image_index + 1
     return image_index

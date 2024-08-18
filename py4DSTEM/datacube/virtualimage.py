@@ -5,7 +5,6 @@
 # for bragg virtual imaging methods, goto diskdetection.virtualimage.py
 
 import numpy as np
-import dask.array as da
 from typing import Optional
 import inspect
 
@@ -220,7 +219,9 @@ class DataCubeVirtualImager:
                     virtual_image[rx, ry] = np.sum(self.data[rx, ry] * mask)
 
             # dask
-            if dask is True:
+            if dask:
+                import dask.array as da
+
                 # set up a generalized universal function for dask distribution
                 def _apply_mask_dask(self, mask):
                     virtual_image = np.sum(
@@ -681,6 +682,8 @@ class DataCubeVirtualImager:
         origin,
         max_q,
         return_sum=True,
+        include_origin=True,
+        rotation_deg=0,
         **kwargs,
     ):
         """
@@ -696,12 +699,21 @@ class DataCubeVirtualImager:
             return_sum (bool): if False, return a 3D array, where each
                 slice contains a single disk; if False, return a single
                 2D masks of all disks
+            include_origin (bool) : if False, removes origin disk
+            rotation_deg (float) : rotate g1 and g2 vectors
 
         Returns:
             (2 or 3D array) the mask
         """
-        nas = np.asarray
-        g1, g2, origin = nas(g1), nas(g2), nas(origin)
+        g1, g2, origin = np.asarray(g1), np.asarray(g2), np.asarray(origin)
+
+        rotation_rad = np.deg2rad(rotation_deg)
+        cost = np.cos(rotation_rad)
+        sint = np.sin(rotation_rad)
+        rotation_matrix = np.array(((cost, sint), (-sint, cost)))
+
+        g1 = np.dot(g1, rotation_matrix)
+        g2 = np.dot(g2, rotation_matrix)
 
         # Get N,M, the maximum indices to tile out to
         L1 = np.sqrt(np.sum(g1**2))
@@ -722,15 +734,18 @@ class DataCubeVirtualImager:
         N = 0
         for h in range(-H, H + 1):
             for k in range(-K, K + 1):
-                v = h * g1 + k * g2
-                if np.sqrt(v.dot(v)) < max_q:
-                    center = origin + v
-                    mask[:, :, N] = self.make_detector(
-                        Qshape,
-                        mode="circle",
-                        geometry=(center, radius),
-                    )
-                    N += 1
+                if h == 0 and k == 0 and include_origin is False:
+                    continue
+                else:
+                    v = h * g1 + k * g2
+                    if np.sqrt(v.dot(v)) < max_q:
+                        center = origin + v
+                        mask[:, :, N] = self.make_detector(
+                            Qshape,
+                            mode="circle",
+                            geometry=(center, radius),
+                        )
+                        N += 1
 
         if return_sum:
             mask = np.sum(mask, axis=2)

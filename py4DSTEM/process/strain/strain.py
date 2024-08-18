@@ -1,19 +1,17 @@
 # Defines the Strain class
 
 import warnings
-from typing import Optional
+from typing import Optional, List, Tuple, Union
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.collections import PatchCollection
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 from py4DSTEM import PointList, PointListArray, tqdmnd
 from py4DSTEM.braggvectors import BraggVectors
 from py4DSTEM.data import Data, RealSlice
 from py4DSTEM.preprocess.utils import get_maxima_2D
 from py4DSTEM.process.strain.latticevectors import (
-    add_indices_to_braggvectors,
     fit_lattice_vectors_all_DPs,
     get_reference_g1g2,
     get_rotated_strain_map,
@@ -25,8 +23,6 @@ from py4DSTEM.visualize import (
     add_bragg_index_labels,
     add_pointlabels,
     add_vector,
-    ax_addaxes,
-    ax_addaxes_QtoR,
 )
 
 
@@ -390,6 +386,78 @@ class StrainMap(RealSlice, Data):
         else:
             return
 
+    def set_hkl(
+        self,
+        g1_hkl: Union[List[int], Tuple[int, int, int], np.ndarray[np.int64]],
+        g2_hkl: Union[List[int], Tuple[int, int, int], np.ndarray[np.int64]],
+    ):
+        """
+        calculate the [h,k,l] reflections from the `g1_ind`,`g2_ind` from known 'g1_hkl` and 'g2_hkl' reflections.
+        Creates 'bragg_vectors_indexed_hkl' attribute
+        Args:
+            g1_hkl (list[int] | tuple[int,int,int] | np.ndarray[int]): known [h,k,l] reflection for g1_vector
+            g2_hkl (list[int] | tuple[int,int,int] | np.ndarray[int]): known [h,k,l] reflection for g1_vector
+        """
+
+        g1_hkl = np.array(g1_hkl)
+        g2_hkl = np.array(g2_hkl)
+
+        # Initialize a PLA
+        bvs_hkl = PointListArray(
+            shape=self.shape,
+            dtype=[
+                ("qx", float),
+                ("qy", float),
+                ("intensity", float),
+                ("h", int),
+                ("k", int),
+                ("l", int),
+            ],
+        )
+        # loop over the probe posistions
+        for Rx, Ry in tqdmnd(
+            self.shape[0],
+            self.shape[1],
+            desc="Converting (g1_ind,g2_ind) to (h,k,l)",
+            unit="DP",
+            unit_scale=True,
+        ):
+            # get a single indexed
+            braggvectors_indexed_dp = self.bragg_vectors_indexed[Rx, Ry]
+
+            # make a Pointlsit
+            bvs_hkl_curr = PointList(
+                data=np.empty(len(braggvectors_indexed_dp), dtype=bvs_hkl.dtype)
+            )
+            # populate qx, qy and intensity fields
+            bvs_hkl_curr.data["qx"] = braggvectors_indexed_dp["qx"]
+            bvs_hkl_curr.data["qy"] = braggvectors_indexed_dp["qy"]
+            bvs_hkl_curr.data["intensity"] = braggvectors_indexed_dp["intensity"]
+
+            # calcuate the hkl vectors
+            vectors_hkl = (
+                g1_hkl[:, np.newaxis] * braggvectors_indexed_dp["g1_ind"]
+                + g2_hkl[:, np.newaxis] * braggvectors_indexed_dp["g2_ind"]
+            )
+            # self.vectors_hkl = vectors_hkl
+
+            # populate h,k,l fields
+            # print(vectors_hkl.shape)
+            # bvs_hkl_curr.data['h'] = vectors_hkl[0,:]
+            # bvs_hkl_curr.data['k'] = vectors_hkl[1,:]
+            # bvs_hkl_curr.data['l'] = vectors_hkl[2,:]
+            (
+                bvs_hkl_curr.data["h"],
+                bvs_hkl_curr.data["k"],
+                bvs_hkl_curr.data["l"],
+            ) = np.vsplit(vectors_hkl, 3)
+
+            # add to the PLA
+            bvs_hkl[Rx, Ry] += bvs_hkl_curr
+
+        # add the PLA to the Strainmap object
+        self.bragg_vectors_indexed_hkl = bvs_hkl
+
     def set_max_peak_spacing(
         self,
         max_peak_spacing,
@@ -505,8 +573,8 @@ class StrainMap(RealSlice, Data):
                 ("qx", float),
                 ("qy", float),
                 ("intensity", float),
-                ("h", int),
-                ("k", int),
+                ("g1_ind", int),
+                ("g2_ind", int),
             ],
             shape=self.braggvectors.Rshape,
         )
@@ -542,8 +610,8 @@ class StrainMap(RealSlice, Data):
                                 pl.data["qx"][i],
                                 pl.data["qy"][i],
                                 pl.data["intensity"][i],
-                                self.braggdirections.data["h"][ind],
-                                self.braggdirections.data["k"][ind],
+                                self.braggdirections.data["g1_ind"][ind],
+                                self.braggdirections.data["g2_ind"][ind],
                             )
                         )
         self.bragg_vectors_indexed = indexed_braggpeaks
@@ -583,6 +651,7 @@ class StrainMap(RealSlice, Data):
             amount, in degrees
         returncal : bool
             It True, returns rotated map
+        **kwargs: keywords passed to py4DSTEM show function
         """
         # confirm that the calstate hasn't changed
         assert (
@@ -681,6 +750,7 @@ class StrainMap(RealSlice, Data):
         layout="square",
         figsize=None,
         returnfig=False,
+        **kwargs,
     ):
         """
         Display a strain map, showing the 4 strain components
@@ -738,11 +808,12 @@ class StrainMap(RealSlice, Data):
             Scaling for the legend g-vectors relative to the coordinate axes
         layout : int
             Determines the layout of the grid which the strain components
-            will be plotted in.  Must be in (0,1,2).  0=(2x2), 1=(1x4), 2=(4x1).
+            will be plotted in.  Options are "square", "horizontal", "vertical."
         figsize : length 2 tuple of numbers
             Size of the figure
         returnfig : bool
             Toggles returning the figure
+        **kwargs: keywords passed to py4DSTEM show function
         """
 
         from py4DSTEM.visualize import show_strain
@@ -776,6 +847,7 @@ class StrainMap(RealSlice, Data):
             layout=layout,
             figsize=figsize,
             returnfig=True,
+            **kwargs,
         )
 
         # show/return
@@ -1178,11 +1250,16 @@ class StrainMap(RealSlice, Data):
             The display image
         bragg_directions : PointList
             The Bragg scattering directions.  Must have coordinates
-            'qx','qy','h', and 'k'. Optionally may also have 'l'.
+            ('qx','qy','h', and 'k') or ('qx','qy','g1_ind', and 'g2_ind'. Optionally may also have 'l'.
         """
         assert isinstance(bragg_directions, PointList)
-        for k in ("qx", "qy", "h", "k"):
-            assert k in bragg_directions.data.dtype.fields
+        # checking if it has h, k or g1_ind, g2_ind
+        assert all(
+            key in bragg_directions.data.dtype.names for key in ("qx", "qy", "h", "k")
+        ) or all(
+            key in bragg_directions.data.dtype.names
+            for key in ("qx", "qy", "g1_ind", "g2_ind")
+        ), 'pointlist must contain ("qx", "qy", "h", "k") or ("qx", "qy", "g1_ind", "g2_ind") fields'
 
         if figax is None:
             fig, ax = show(ar, returnfig=True, **kwargs)
@@ -1201,6 +1278,7 @@ class StrainMap(RealSlice, Data):
             "pointsize": pointsize,
             "pointcolor": pointcolor,
         }
+        # this can take ("qx", "qy", "h", "k") or ("qx", "qy", "g1_ind", "g2_ind") fields
         add_bragg_index_labels(ax, d)
 
         if returnfig:
