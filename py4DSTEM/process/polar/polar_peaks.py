@@ -310,12 +310,29 @@ def find_peaks_single_pattern(
         ct = np.cos(t)
         st = np.sin(t)
 
-        fig, ax = plt.subplots(figsize=figsize)
-
         cmap = kwargs.pop("cmap", "gray")
         vmax = kwargs.pop("vmax", 1)
         vmin = kwargs.pop("vmin", 0)
-        show(im_plot, figax=(fig, ax), cmap=cmap, vmax=vmax, vmin=vmin, **kwargs)
+
+        if 'figax' in kwargs:
+            fig,ax = kwargs['figax']
+            show(
+                im_plot, 
+                cmap=cmap, 
+                vmax=vmax, 
+                vmin=vmin, 
+                **kwargs,
+            )
+        else:
+            fig, ax = plt.subplots(figsize=figsize)
+            show(
+                im_plot, 
+                figax=(fig, ax), 
+                cmap=cmap, 
+                vmax=vmax, 
+                vmin=vmin, 
+                **kwargs,
+            )
 
         # peaks
         ax.scatter(
