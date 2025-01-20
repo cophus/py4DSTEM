@@ -618,6 +618,7 @@ class SingleslicePtychography(
         max_batch_size: int = None,
         seed_random: int = None,
         step_size: float = 0.5,
+        accelerated_gradient_descent = False,
         normalization_min: float = 1,
         positions_step_size: float = 0.5,
         pure_phase_object: bool = False,
@@ -692,6 +693,8 @@ class SingleslicePtychography(
             Seeds the random number generator, only applicable when max_batch_size is not None
         step_size: float, optional
             Update step size
+        accelerated_gradient_descent: bool
+            Use Nesterov accelerated gradient descent.
         normalization_min: float, optional
             Probe normalization minimum as a fraction of the maximum overlap intensity
         positions_step_size: float, optional
@@ -860,6 +863,15 @@ class SingleslicePtychography(
         if virtual_detector_masks is not None:
             virtual_detector_masks = xp.asarray(virtual_detector_masks).astype(xp.bool_)
 
+        # TEMP - adding acceleration for testing
+        self._accelerated_gradient_descent = accelerated_gradient_descent
+        if accelerated_gradient_descent:
+            current_iter = len(self.object_iterations)
+            self._accel_a = np.ones(current_iter)
+            self._accel_g = np.zeros(current_iter)
+            self._accel_start = False
+
+
         # main loop
         for a0 in tqdmnd(
             num_iter,
@@ -1001,6 +1013,11 @@ class SingleslicePtychography(
             if store_iterations:
                 self.object_iterations.append(asnumpy(self._object).copy())
                 self.probe_iterations.append(self.probe_centered)
+
+            # if accelerated_gradient_descent:
+            #     self._accel_prev_object = self.object
+        
+
 
         # store result
         self.object = asnumpy(self._object)
